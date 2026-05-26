@@ -1,33 +1,24 @@
-import Link from "next/link";
 import { requireUser } from "@/lib/rbac";
-import { AppSidebar } from "@/components/auth/app-sidebar";
-import { UserMenu } from "@/components/auth/user-menu";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { Sidebar } from "@/components/nav/sidebar";
+import { Topbar } from "@/components/nav/topbar";
+import { SidebarStateProvider } from "@/components/nav/sidebar-state";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const isAdmin = user.permissions.some((p) =>
-    ["users:read", "roles:read"].includes(p),
+  const canSeeAdmin = user.permissions.some((p) =>
+    ["users:read", "roles:read", "invites:read"].includes(p),
   );
+  const canSeeProcesses = user.permissions.includes("processes:read");
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4 lg:px-6">
-        <Link href="/dashboard" className="text-sm font-semibold tracking-tight">
-          Enterprise Template
-        </Link>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <UserMenu />
+    <SidebarStateProvider>
+      <div className="flex h-screen bg-background">
+        <Sidebar canSeeProcesses={canSeeProcesses} canSeeAdmin={canSeeAdmin} />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <Topbar />
+          <main className="min-w-0 flex-1 overflow-auto p-6">{children}</main>
         </div>
-      </header>
-
-      <div className="flex min-h-0 flex-1">
-        <AppSidebar isAdmin={isAdmin} />
-        <main className="min-w-0 flex-1 overflow-y-auto px-4 py-8 lg:px-8">
-          {children}
-        </main>
       </div>
-    </div>
+    </SidebarStateProvider>
   );
 }

@@ -1,9 +1,23 @@
 "use client";
 
-import { LayoutDashboard, Users, ShieldCheck, Building2, UserCog, Sparkles } from "lucide-react";
+import {
+  LayoutDashboard,
+  Users,
+  ShieldCheck,
+  Building2,
+  UserCog,
+  Sparkles,
+  Activity,
+} from "lucide-react";
 import { PageSidebar } from "@/components/page-sidebar";
 
-export function AppSidebar({ isAdmin }: { isAdmin: boolean }) {
+export function AppSidebar({
+  isAdmin,
+  canSeeProcesses = false,
+}: {
+  isAdmin: boolean;
+  canSeeProcesses?: boolean;
+}) {
   const sections = [
     {
       items: [
@@ -12,6 +26,14 @@ export function AppSidebar({ isAdmin }: { isAdmin: boolean }) {
         { label: "Profile", href: "/profile", icon: UserCog },
       ],
     },
+    ...(canSeeProcesses
+      ? [
+          {
+            title: "Operations",
+            items: [{ label: "Processes", href: "/processes", icon: Activity }],
+          },
+        ]
+      : []),
     ...(isAdmin
       ? [
           {

@@ -11,11 +11,23 @@ const PERMISSIONS = [
   { key: "roles:write", description: "Manage roles and permissions" },
   { key: "invites:read", description: "View invitations" },
   { key: "invites:write", description: "Create and revoke invitations" },
+  { key: "processes:read", description: "View pm2-go managed processes" },
+  { key: "processes:write", description: "Start, restart, and reload processes" },
+  { key: "processes:delete", description: "Delete processes" },
+  { key: "processes:logs", description: "View process logs" },
+];
+
+const PROCESS_PERMS = [
+  "processes:read",
+  "processes:write",
+  "processes:delete",
+  "processes:logs",
 ];
 
 const ROLES: Record<string, string[]> = {
   admin: PERMISSIONS.map((p) => p.key),
   member: [],
+  "pm2-operator": PROCESS_PERMS,
 };
 
 async function main() {
