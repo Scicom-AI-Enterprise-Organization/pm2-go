@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function ImportEcosystemPage() {
   await requirePermission("processes:write");
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="space-y-4">
       <div>
         <Link
           href="/processes"

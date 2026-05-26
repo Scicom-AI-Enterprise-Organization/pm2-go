@@ -1,5 +1,5 @@
 import { requirePermission, hasPermission, getCurrentUser } from "@/lib/rbac";
-import { listProcs } from "@/lib/pm2";
+import { listProcs, type ProcessView } from "@/lib/pm2";
 import { ProcessesView } from "./processes-view";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export default async function ProcessesPage() {
   const canWrite = hasPermission(me, "processes:write");
   const canDelete = hasPermission(me, "processes:delete");
 
-  let initial;
+  let initial: ProcessView[];
   try {
     initial = await listProcs();
   } catch {
@@ -19,7 +19,7 @@ export default async function ProcessesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Processes</h1>
         <p className="mt-2 text-muted-foreground">

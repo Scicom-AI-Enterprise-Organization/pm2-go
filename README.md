@@ -156,6 +156,50 @@ PM2_GO_DAEMON_URL=http://daemon-host.internal:9615
 PM2_GO_DAEMON_TOKEN=<paste ~/.pm2-go/api-token from that host>
 ```
 
+### Daemon API reference
+
+The daemon's HTTP API is documented at:
+
+- **Markdown reference** — [`daemon/docs/api.md`](daemon/docs/api.md) (source of truth)
+- **Live, in-app docs** — `/api-docs` in the UI (auto-fills your daemon URL + token into copy-pasteable curl examples; gated on `processes:read`, token reveal gated on `processes:write`)
+
+Covers every `/v1/*` endpoint with examples, the full `Spec` field reference, the error envelope, ndjson log/metrics streaming, CORS / env-var configuration, and the relationship to the Unix-socket IPC the CLI uses.
+
+### Dev mode with hot reload (recommended for UI work)
+
+The default `docker-compose.yml` builds a production Next.js bundle and runs
+`node server.js` — no HMR, no file watching. For UI iteration use the dev
+overlay, which bind-mounts `./src` and runs `next dev` inside the container
+(mirrors `scicom-aura`'s setup):
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+# edit any file under src/ — the browser auto-refreshes via Next's HMR
+```
+
+What's different in dev mode:
+
+- `Dockerfile.dev` is a slim `node:20-alpine` with `python3 make g++` for
+  native modules (bcrypt, prisma engines). It does **not** copy source —
+  source comes from a bind mount.
+- A `migrate` one-shot container runs `prisma migrate deploy && tsx prisma/seed.ts`
+  before the app starts, so the DB is ready on first `up`.
+- `node_modules` and `.next` live in named volumes (`web_node_modules`,
+  `web_next`) — keeps the host's node_modules from shadowing the container's,
+  and survives `down`/`up`.
+- `WATCHPACK_POLLING=true` + `CHOKIDAR_USEPOLLING=true` make the file watcher
+  reliable on bind mounts where inotify isn't propagated.
+
+Same ports as the prod compose (3002 / 9616 / 5435), so the `.env` you
+already have works.
+
+To go back to the prod compose:
+
+```bash
+docker compose -f docker-compose.dev.yml down
+docker compose up -d   # production bundle, no HMR
+```
+
 ### Running the test suite
 
 The Go daemon has unit + integration tests covering the supervisor, IPC, web

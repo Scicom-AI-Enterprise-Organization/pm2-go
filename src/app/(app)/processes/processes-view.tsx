@@ -18,6 +18,7 @@ import {
   startAllAction,
   stopAllAction,
 } from "./actions";
+import { ConfirmDeleteDialog } from "./confirm-delete-dialog";
 
 type Perms = {
   canWrite: boolean;
@@ -218,9 +219,11 @@ function DaemonToolbar({
   lastTick,
 }: Perms & { paused: boolean; onPauseToggle: () => void; lastTick: number }) {
   const [pending, start] = useTransition();
-  const run = (label: string, fn: () => Promise<unknown>, danger = false) =>
+  const [stopAllOpen, setStopAllOpen] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+
+  const run = (label: string, fn: () => Promise<unknown>) =>
     start(async () => {
-      if (danger && !confirm(`${label} — are you sure?`)) return;
       try {
         await fn();
         toast.success(label);
@@ -264,7 +267,7 @@ function DaemonToolbar({
               size="sm"
               variant="outline"
               disabled={pending}
-              onClick={() => run("Stopped all", () => stopAllAction(), true)}
+              onClick={() => setStopAllOpen(true)}
             >
               <Pause className="h-4 w-4" /> Stop all
             </Button>
@@ -276,7 +279,7 @@ function DaemonToolbar({
             variant="outline"
             className="text-red-600 dark:text-red-400"
             disabled={pending}
-            onClick={() => run("Deleted all", () => deleteAllAction(), true)}
+            onClick={() => setDeleteAllOpen(true)}
           >
             <Trash2 className="h-4 w-4" /> Delete all
           </Button>
@@ -289,6 +292,33 @@ function DaemonToolbar({
           {paused ? "Resume polling" : "Pause polling"}
         </Button>
       </div>
+
+      {canWrite ? (
+        <ConfirmDeleteDialog
+          open={stopAllOpen}
+          onOpenChange={setStopAllOpen}
+          name="all processes"
+          title="Stop all processes?"
+          description="SIGTERMs every managed instance, then SIGKILLs anything that doesn't exit within its kill_timeout. The dump is preserved, so a subsequent `Start all` brings them back."
+          challenge="stop all"
+          confirmLabel="Stop all"
+          action={() => stopAllAction()}
+          successMessage="Stopped all"
+        />
+      ) : null}
+      {canDelete ? (
+        <ConfirmDeleteDialog
+          open={deleteAllOpen}
+          onOpenChange={setDeleteAllOpen}
+          name="all processes"
+          title="Delete all processes?"
+          description="Stops every instance and removes every spec from the dump.json. Log files on disk stay, but the daemon will no longer supervise anything until you re-add apps."
+          challenge="delete all"
+          confirmLabel="Delete all"
+          action={() => deleteAllAction()}
+          successMessage="Deleted all"
+        />
+      ) : null}
     </div>
   );
 }

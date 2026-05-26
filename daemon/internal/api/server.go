@@ -78,10 +78,16 @@ func Serve(ctx context.Context, sup *daemon.Supervisor) error {
 }
 
 func readConfig() (addr, token string, err error) {
-	if b, e := os.ReadFile(paths.APIPortFile()); e == nil {
+	// Env vars win over files so docker-compose can wire this up without an
+	// init step.
+	if v := strings.TrimSpace(os.Getenv("PM2_GO_API_ADDR")); v != "" {
+		addr = v
+	} else if b, e := os.ReadFile(paths.APIPortFile()); e == nil {
 		addr = strings.TrimSpace(string(b))
 	}
-	if b, e := os.ReadFile(paths.APIToken()); e == nil {
+	if v := strings.TrimSpace(os.Getenv("PM2_GO_API_TOKEN")); v != "" {
+		token = v
+	} else if b, e := os.ReadFile(paths.APIToken()); e == nil {
 		token = strings.TrimSpace(string(b))
 	}
 	return addr, token, nil

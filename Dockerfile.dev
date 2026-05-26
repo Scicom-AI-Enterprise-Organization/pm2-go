@@ -1,0 +1,14 @@
+# Dev image for the Next.js app — bind-mounted source + `next dev` with HMR.
+# Bundles the system deps Prisma + native modules (bcryptjs) need, but does NOT
+# pre-install npm modules: those live in a docker-managed volume so the host's
+# node_modules (often a Linux-on-macOS mix or just missing) doesn't shadow them.
+FROM node:20-alpine
+
+RUN apk add --no-cache python3 make g++ openssl libc6-compat
+
+WORKDIR /app
+EXPOSE 3000
+
+# Default CMD is overridden by docker-compose.dev.yml so we can run
+# `npm install` once on container boot before starting next dev.
+CMD ["sh", "-c", "npm install && npx prisma generate && npm run dev"]

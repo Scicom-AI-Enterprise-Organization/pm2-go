@@ -5,10 +5,10 @@ import { usePathname } from "next/navigation";
 import {
   Activity,
   Building2,
+  Code2,
   LayoutDashboard,
   Plus,
   ShieldCheck,
-  Sparkles,
   User,
   Users,
 } from "lucide-react";
@@ -41,9 +41,9 @@ export function Sidebar({ canSeeProcesses, canSeeAdmin }: SidebarProps) {
             icon: Activity,
             quickAction: { href: "/processes/new", label: "New process" },
           } as Item,
+          { label: "API docs", href: "/api-docs", icon: Code2 },
         ]
       : []),
-    { label: "AI Workspace", href: "/ai", icon: Sparkles },
   ];
 
   const ACCOUNT: Item[] = [{ label: "Profile", href: "/profile", icon: User }];

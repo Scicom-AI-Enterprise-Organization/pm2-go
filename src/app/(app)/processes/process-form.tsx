@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ProcessSpec } from "@/lib/pm2";
 import { startAction, upsertAction } from "./actions";
 
@@ -35,6 +37,7 @@ type Mode = "create" | "edit";
 type Props = {
   mode: Mode;
   initial?: ProcessSpec;
+  cancelHref?: string;
 };
 
 /**
@@ -42,7 +45,7 @@ type Props = {
  * `/processes/[name]/edit`. In edit mode the name is read-only because it's
  * the spec's primary key on the daemon.
  */
-export function ProcessForm({ mode, initial }: Props) {
+export function ProcessForm({ mode, initial, cancelHref = "/processes" }: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const isEdit = mode === "edit";
@@ -111,6 +114,7 @@ export function ProcessForm({ mode, initial }: Props) {
         } else {
           await startAction(spec);
           toast.success(`Started ${name}`);
+          router.push(`/processes/${encodeURIComponent(name)}`);
         }
       } catch (err) {
         toast.error(`${isEdit ? "Save" : "Start"} ${name} failed: ${(err as Error).message}`);
@@ -120,6 +124,11 @@ export function ProcessForm({ mode, initial }: Props) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
       <div className="flex items-center gap-3 rounded-md border border-border bg-muted/40 p-3">
         <Switch
           id="shell-mode"
@@ -128,10 +137,12 @@ export function ProcessForm({ mode, initial }: Props) {
         />
         <div>
           <Label htmlFor="shell-mode" className="cursor-pointer">
-            Run in shell <span className="font-mono text-xs">/bin/sh -c</span>
+            Paste a raw command or shell script{" "}
+            <span className="font-mono text-xs text-muted-foreground">(/bin/sh -c)</span>
           </Label>
           <p className="text-xs text-muted-foreground">
-            Enable for pipes, redirects, env expansion, and long quoted command lines.
+            Run multi-line bash scripts, one-liners with pipes/redirects, or any command line —
+            the daemon executes it via <code className="font-mono">/bin/sh -c &quot;…&quot;</code>.
           </p>
         </div>
       </div>
@@ -154,20 +165,26 @@ export function ProcessForm({ mode, initial }: Props) {
       </div>
 
       {shellMode ? (
-        <div>
-          <Label htmlFor="command">Command</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="command" className="block">
+            Command or script
+          </Label>
           <Textarea
             id="command"
             name="command"
             required
-            rows={3}
+            rows={14}
             spellCheck={false}
-            placeholder='cd /srv/app && node index.js --port 3000 | tee -a /var/log/app.log'
+            placeholder={`#!/usr/bin/env bash\nset -euo pipefail\ncd /srv/app\nexec node index.js --port 3000 | tee -a /var/log/app.log`}
             defaultValue={detected.command}
             className="font-mono text-xs"
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Runs as <code className="font-mono">/bin/sh -c &quot;…&quot;</code>.
+            Anything that runs under <code className="font-mono">/bin/sh -c</code>. Multi-line scripts,
+            <code className="font-mono">{" #!"}</code>-prefixed bash, pipes, redirects, and{" "}
+            <code className="font-mono">$VAR</code> expansion all work. A non-<code className="font-mono">/bin/sh</code>{" "}
+            shebang is ignored — for Python/Node scripts, point <em>Script</em> at the file or wrap
+            with <code className="font-mono">python3 - &lt;&lt;EOF … EOF</code>.
           </p>
         </div>
       ) : (
@@ -285,8 +302,10 @@ export function ProcessForm({ mode, initial }: Props) {
         <Label htmlFor="autorestart">Autorestart on exit</Label>
       </div>
 
-      <div>
-        <Label htmlFor="env">Environment (KEY=VALUE per line)</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="env" className="block">
+          Environment (KEY=VALUE per line)
+        </Label>
         <Textarea
           id="env"
           name="env"
@@ -302,7 +321,15 @@ export function ProcessForm({ mode, initial }: Props) {
         />
       </div>
 
+        </CardContent>
+      </Card>
+
       <div className="flex justify-end gap-2">
+        <Link href={cancelHref}>
+          <Button type="button" variant="ghost" disabled={pending}>
+            Cancel
+          </Button>
+        </Link>
         <Button type="submit" disabled={pending}>
           {pending ? (isEdit ? "Saving…" : "Starting…") : isEdit ? "Save changes" : "Start process"}
         </Button>
@@ -331,8 +358,10 @@ function Field({
   readOnly?: boolean;
 }) {
   return (
-    <div>
-      <Label htmlFor={name}>{label}</Label>
+    <div className="space-y-1.5">
+      <Label htmlFor={name} className="block">
+        {label}
+      </Label>
       <Input
         id={name}
         name={name}

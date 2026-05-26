@@ -18,15 +18,19 @@ export default async function ProcessLogsPage({
   const name = decodeURIComponent(rawName);
 
   // Seed with recent history so the page isn't empty on first render.
-  const history = await tailLogs(name, 100).catch(() => ({} as Record<string, string[]>));
+  // Older daemons returned nil for empty files (JSON null) — coerce defensively.
+  const history = await tailLogs(name, 100).catch(
+    () => ({} as Record<string, string[] | null>),
+  );
   const initialLines: { runtime: string; stream: string; text: string }[] = [];
   for (const [key, lines] of Object.entries(history)) {
+    if (!lines) continue;
     const [runtime, stream] = key.split(":");
     for (const text of lines) initialLines.push({ runtime, stream, text });
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <Link

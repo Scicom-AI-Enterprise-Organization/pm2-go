@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac";
 import { describeApp } from "@/lib/pm2";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import { ProcessForm } from "../../process-form";
 
@@ -26,7 +25,7 @@ export default async function EditProcessPage({
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="space-y-4">
       <div>
         <Link
           href={`/processes/${encodeURIComponent(name)}`}
@@ -40,14 +39,11 @@ export default async function EditProcessPage({
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Configuration</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ProcessForm mode="edit" initial={data.spec} />
-        </CardContent>
-      </Card>
+      <ProcessForm
+        mode="edit"
+        initial={data.spec}
+        cancelHref={`/processes/${encodeURIComponent(name)}`}
+      />
     </div>
   );
 }

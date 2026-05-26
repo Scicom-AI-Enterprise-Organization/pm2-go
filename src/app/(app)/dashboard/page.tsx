@@ -1,52 +1,55 @@
-import { requireUser } from "@/lib/rbac";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { requireUser, hasPermission } from "@/lib/rbac";
+import { listProcs, type ProcessView } from "@/lib/pm2";
+import { DashboardView, AccountOnlyDashboard } from "./dashboard-view";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function DashboardPage() {
   const user = await requireUser();
+  const canReadProcs = hasPermission(user, "processes:read");
+  const canWrite = hasPermission(user, "processes:write");
+
+  let initial: ProcessView[] = [];
+  let daemonReachable = true;
+  let daemonError: string | undefined;
+  if (canReadProcs) {
+    try {
+      initial = await listProcs();
+    } catch (e) {
+      daemonReachable = false;
+      daemonError = (e as Error).message;
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <h1 className="text-3xl font-bold tracking-tight">
-        Welcome{user.name ? `, ${user.name}` : ""}
-      </h1>
-      <p className="mt-2 text-muted-foreground">{user.email}</p>
-
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Roles</CardTitle>
-            <CardDescription>Roles assigned to your account.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {user.roles.length === 0 && (
-              <span className="text-sm text-muted-foreground">No roles assigned.</span>
-            )}
-            {user.roles.map((r) => (
-              <Badge key={r} variant="secondary">
-                {r}
-              </Badge>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Permissions</CardTitle>
-            <CardDescription>Effective permissions from your roles.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {user.permissions.length === 0 && (
-              <span className="text-sm text-muted-foreground">No permissions.</span>
-            )}
-            {user.permissions.map((p) => (
-              <Badge key={p} variant="outline">
-                {p}
-              </Badge>
-            ))}
-          </CardContent>
-        </Card>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Welcome{user.name ? `, ${user.name}` : ""}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {canReadProcs
+            ? "Live fleet overview — auto-refreshes every 5 seconds."
+            : "Your account at a glance."}
+        </p>
       </div>
+
+      {canReadProcs ? (
+        <DashboardView
+          initial={initial}
+          canWrite={canWrite}
+          daemonReachable={daemonReachable}
+          daemonError={daemonError}
+        />
+      ) : (
+        <AccountOnlyDashboard
+          roles={user.roles}
+          permissions={user.permissions}
+          email={user.email}
+          name={user.name}
+        />
+      )}
     </div>
   );
 }

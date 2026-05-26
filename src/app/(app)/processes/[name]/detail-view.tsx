@@ -1,14 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import type { ProcessSpec, ProcessView } from "@/lib/pm2";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, Pencil } from "lucide-react";
+import { FileText, Pencil, RotateCw, Square, Trash2 } from "lucide-react";
 import { humanBytes, humanDuration, stateColor } from "../format";
 import { ProcessRowActions } from "../row-actions";
+import { ConfirmDeleteDialog } from "../confirm-delete-dialog";
+import { deleteAction, restartAction, stopAction } from "../actions";
 import { MetricsChart } from "./metrics-chart";
 
 const POLL_MS = 2000;
@@ -26,8 +30,10 @@ type Props = {
  * state, uptime, and metrics stay live without a page reload.
  */
 export function DetailView({ name, initial, canWrite, canDelete, canLogs }: Props) {
+  const router = useRouter();
   const [data, setData] = useState(initial);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,10 +67,13 @@ export function DetailView({ name, initial, canWrite, canDelete, canLogs }: Prop
   }, [name]);
 
   const { spec, procs } = data;
+  const anyOnline = procs.some(
+    (p) => p.state === "online" || p.state === "launching" || p.state === "online_restarting",
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{spec.name}</h1>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
@@ -73,7 +82,7 @@ export function DetailView({ name, initial, canWrite, canDelete, canLogs }: Prop
             {spec.args && spec.args.length > 0 ? ` ${spec.args.join(" ")}` : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {canLogs ? (
             <Link href={`/processes/${encodeURIComponent(spec.name)}/logs`}>
               <Button variant="outline">
@@ -82,11 +91,38 @@ export function DetailView({ name, initial, canWrite, canDelete, canLogs }: Prop
             </Link>
           ) : null}
           {canWrite ? (
-            <Link href={`/processes/${encodeURIComponent(spec.name)}/edit`}>
-              <Button>
-                <Pencil className="h-4 w-4" /> Edit
-              </Button>
-            </Link>
+            <>
+              <ActionButton
+                label="Restart"
+                variant="outline"
+                icon={<RotateCw className="h-4 w-4" />}
+                action={() => restartAction(spec.name)}
+                toastLabel={`Restarted ${spec.name}`}
+              />
+              <ActionButton
+                label="Kill"
+                variant="outline"
+                tone="danger"
+                disabled={!anyOnline}
+                icon={<Square className="h-4 w-4" />}
+                action={() => stopAction(spec.name)}
+                toastLabel={`Stopped ${spec.name}`}
+              />
+              <Link href={`/processes/${encodeURIComponent(spec.name)}/edit`}>
+                <Button variant="outline">
+                  <Pencil className="h-4 w-4" /> Edit
+                </Button>
+              </Link>
+            </>
+          ) : null}
+          {canDelete ? (
+            <Button
+              variant="outline"
+              className="text-red-600 dark:text-red-400"
+              onClick={() => setConfirmDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" /> Delete
+            </Button>
           ) : null}
         </div>
       </div>
@@ -176,6 +212,14 @@ export function DetailView({ name, initial, canWrite, canDelete, canLogs }: Prop
         </CardContent>
       </Card>
 
+      <ConfirmDeleteDialog
+        name={spec.name}
+        action={() => deleteAction(spec.name)}
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        onSuccess={() => router.push("/processes")}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Configuration</CardTitle>
@@ -208,6 +252,50 @@ export function DetailView({ name, initial, canWrite, canDelete, canLogs }: Prop
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function ActionButton({
+  label,
+  icon,
+  action,
+  toastLabel,
+  confirm,
+  variant = "outline",
+  tone,
+  disabled,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  action: () => Promise<unknown>;
+  toastLabel: string;
+  confirm?: string;
+  variant?: "default" | "outline" | "ghost";
+  tone?: "danger";
+  disabled?: boolean;
+}) {
+  const [pending, start] = useTransition();
+  const toneClass = tone === "danger" ? "text-red-600 dark:text-red-400" : "";
+  return (
+    <Button
+      variant={variant}
+      disabled={pending || disabled}
+      className={toneClass}
+      onClick={() => {
+        if (confirm && !window.confirm(confirm)) return;
+        start(async () => {
+          try {
+            await action();
+            toast.success(toastLabel);
+          } catch (e) {
+            toast.error(`${label} failed: ${(e as Error).message}`);
+          }
+        });
+      }}
+    >
+      {icon}
+      {pending ? `${label}…` : label}
+    </Button>
   );
 }
 

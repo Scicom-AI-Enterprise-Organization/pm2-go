@@ -310,10 +310,16 @@ func (s *Supervisor) TailLogs(name, stream string, n int) (map[string][]string, 
 	for _, rt := range s.runtimesOf(spec.ID) {
 		if stream == "" || stream == "out" {
 			lines, _ := logs.Tail(rt.ID, "out", n)
+			if lines == nil {
+				lines = []string{}
+			}
 			out[rt.ID+":out"] = lines
 		}
 		if stream == "" || stream == "err" {
 			lines, _ := logs.Tail(rt.ID, "err", n)
+			if lines == nil {
+				lines = []string{}
+			}
 			out[rt.ID+":err"] = lines
 		}
 	}

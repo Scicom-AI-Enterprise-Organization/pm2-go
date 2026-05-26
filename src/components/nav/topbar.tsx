@@ -13,7 +13,7 @@ const TITLES: Record<string, string> = {
   "/processes": "Processes",
   "/processes/new": "New process",
   "/processes/import": "Import ecosystem",
-  "/ai": "AI Workspace",
+  "/api-docs": "API docs",
   "/profile": "Profile",
   "/admin/users": "Users",
   "/admin/roles": "Roles",

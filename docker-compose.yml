@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: enterprise
     ports:
-      - "5434:5432"
+      - "${DB_HOST_PORT:-5435}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -15,21 +15,43 @@ services:
       timeout: 5s
       retries: 10
 
+  daemon:
+    build:
+      context: ./daemon
+      dockerfile: Dockerfile
+    environment:
+      PM2_GO_HOME: /data
+      PM2_GO_API_ADDR: "0.0.0.0:9615"
+      PM2_GO_API_TOKEN: ${PM2_GO_DAEMON_TOKEN:-dev-shared-token-please-change}
+      PM2_GO_API_CORS: "*"
+    ports:
+      - "${DAEMON_HOST_PORT:-9616}:9615"
+    volumes:
+      - daemon-data:/data
+    restart: unless-stopped
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "${APP_HOST_PORT:-3001}:3000"
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://postgres:postgres@db:5432/enterprise?schema=public
-      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3001}
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-admin1234}
+      PM2_GO_DAEMON_URL: http://daemon:9615
+      PM2_GO_DAEMON_TOKEN: ${PM2_GO_DAEMON_TOKEN:-dev-shared-token-please-change}
     depends_on:
       db:
         condition: service_healthy
+      daemon:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
   db-data:
+  daemon-data:

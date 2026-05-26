@@ -1,0 +1,111 @@
+# Full local dev stack with hot reload.
+#
+#   docker compose -f docker-compose.dev.yml up -d --build
+#   # edit src/* and reload the browser — Next.js HMR picks it up
+#
+# Services:
+#   Web UI  → http://localhost:3002  (Next.js dev mode + HMR)
+#   Daemon  → http://localhost:9616
+#   Postgres → localhost:5435
+#
+# Mirrors scicom-aura's approach: ./src is bind-mounted into the container,
+# node_modules lives in a named volume so it survives across `up`/`down` and
+# doesn't get shadowed by anything on the host.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: enterprise
+    ports:
+      - "${DB_HOST_PORT:-5435}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  daemon:
+    build:
+      context: ./daemon
+      dockerfile: Dockerfile
+    environment:
+      PM2_GO_HOME: /data
+      PM2_GO_API_ADDR: "0.0.0.0:9615"
+      PM2_GO_API_TOKEN: ${PM2_GO_DAEMON_TOKEN:-dev-shared-token-please-change}
+      PM2_GO_API_CORS: "*"
+    ports:
+      - "${DAEMON_HOST_PORT:-9616}:9615"
+    volumes:
+      - daemon-data:/data
+    restart: unless-stopped
+
+  # One-shot: applies Prisma migrations and seeds the admin user. The web
+  # service waits for it to complete via service_completed_successfully.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    command: >
+      sh -c "npm install --no-audit --no-fund &&
+             npx prisma migrate deploy &&
+             npx tsx prisma/seed.ts"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/enterprise?schema=public
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-admin1234}
+    volumes:
+      - .:/app
+      - web_node_modules:/app/node_modules
+      - web_next:/app/.next
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    command: >
+      sh -c "npm install --no-audit --no-fund &&
+             npx prisma generate &&
+             npm run dev -- --port 3000 --hostname 0.0.0.0"
+    ports:
+      - "${APP_HOST_PORT:-3002}:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/enterprise?schema=public
+      AUTH_URL: ${AUTH_URL:-http://localhost:3002}
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      AUTH_TRUST_HOST: "true"
+      PM2_GO_DAEMON_URL: http://daemon:9615
+      PM2_GO_DAEMON_TOKEN: ${PM2_GO_DAEMON_TOKEN:-dev-shared-token-please-change}
+      # Watcher polling — fixes HMR inside docker on filesystems that don't
+      # propagate inotify (overlayfs, btrfs sometimes, or any bind from macOS).
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - .:/app
+      - web_node_modules:/app/node_modules
+      - web_next:/app/.next
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      daemon:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  daemon-data:
+  web_node_modules:
+  web_next:

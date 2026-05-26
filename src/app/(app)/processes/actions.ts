@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/rbac";
 import {
   deleteAll,
@@ -16,11 +15,20 @@ import {
   type ProcessSpec,
 } from "@/lib/pm2";
 
+/**
+ * IMPORTANT: actions called from `useTransition(() => action())` must not call
+ * `next/navigation.redirect()` — it throws a `NEXT_REDIRECT` error that the
+ * client transition surfaces as a normal exception (you'll see "Delete failed:
+ * NEXT_REDIRECT" in a toast). Navigation happens client-side via the caller's
+ * router.push/redirect on success. Actions invoked via `<form action={…}>` are
+ * fine because Next intercepts redirect()s in that path.
+ */
+
 export async function startAction(spec: Partial<ProcessSpec>) {
   await requirePermission("processes:write");
   await startApp(spec);
   revalidatePath("/processes");
-  redirect(`/processes/${encodeURIComponent(spec.name ?? "")}`);
+  if (spec.name) revalidatePath(`/processes/${spec.name}`);
 }
 
 export async function stopAction(name: string) {
@@ -47,7 +55,6 @@ export async function deleteAction(name: string) {
   await requirePermission("processes:delete");
   await deleteApp(name);
   revalidatePath("/processes");
-  redirect("/processes");
 }
 
 /**

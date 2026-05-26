@@ -359,6 +359,38 @@ func TestSupervisorResurrect(t *testing.T) {
 	})
 }
 
+func TestTailLogsReturnsEmptySliceNotNil(t *testing.T) {
+	setupHome(t)
+	sup := NewSupervisor()
+	defer sup.Shutdown()
+	// Spawn /bin/sleep with no output — both out and err files exist (created
+	// at spawn time) but are empty. The map values must serialise as [] in JSON,
+	// not null, so TS clients can iterate them safely.
+	if err := sup.Add(sleepSpec("quiet", 60)); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, 3*time.Second, "quiet online", func() bool {
+		for _, v := range sup.List() {
+			if v.Name == "quiet" && v.State == process.StateOnline {
+				return true
+			}
+		}
+		return false
+	})
+	streams, err := sup.TailLogs("quiet", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(streams) == 0 {
+		t.Fatal("expected at least one stream key")
+	}
+	for k, v := range streams {
+		if v == nil {
+			t.Errorf("stream %q is nil; should be empty slice for JSON []", k)
+		}
+	}
+}
+
 func TestRuntimeID(t *testing.T) {
 	single := &process.Spec{Name: "a", Instances: 1}
 	if id := runtimeID(single, 0); id != "a" {

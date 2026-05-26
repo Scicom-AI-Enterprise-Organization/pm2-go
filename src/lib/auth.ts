@@ -39,7 +39,17 @@ async function loadUserAccess(userId: string) {
   return { roles, permissions };
 }
 
-const providers = [
+// Heterogeneous provider list — TypeScript would otherwise infer
+// `CredentialsConfig[]` from the first element and reject OIDC providers
+// pushed in below. Auth.js accepts the runtime shape just fine.
+type AnyProvider = NonNullable<Parameters<typeof NextAuth>[0]> extends infer C
+  ? C extends { providers: infer P }
+    ? P extends ReadonlyArray<infer E>
+      ? E
+      : never
+    : never
+  : never;
+const providers: AnyProvider[] = [
   Credentials({
     name: "Email and password",
     credentials: {

@@ -27,7 +27,7 @@ export default async function ProcessDetailPage({
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div>
       <DetailView
         name={name}
         initial={initial}

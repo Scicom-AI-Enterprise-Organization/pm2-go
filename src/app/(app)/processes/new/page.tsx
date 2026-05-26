@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { requirePermission } from "@/lib/rbac";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { NewProcessForm } from "./new-process-form";
 
@@ -10,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function NewProcessPage() {
   await requirePermission("processes:write");
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="space-y-4">
       <div>
         <Link
           href="/processes"
@@ -25,21 +23,7 @@ export default async function NewProcessPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Configuration</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <NewProcessForm />
-          <div className="mt-4 flex justify-end gap-2">
-            <Link href="/processes">
-              <Button variant="ghost" type="button">
-                Cancel
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+      <NewProcessForm />
     </div>
   );
 }
