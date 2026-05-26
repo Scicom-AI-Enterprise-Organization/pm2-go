@@ -17,6 +17,10 @@ web UI, or run the UI against a daemon on another host.
 - **PM2-compatible verbs**: `start`, `stop`, `restart`, `reload`, `delete`,
   `list`, `show`, `logs`, `save`, `resurrect`, `dump`, `monit`, `startup`,
   `ping`, `kill`, `web`.
+- **Quoted commands & shell mode** — `pm2-go start "node app.js --port 3000 --env prod"`
+  auto-splits into script+args. Use `--shell "cd /srv && node app.js | tee log"`
+  to wrap the command in `/bin/sh -c "…"` for pipes, redirects, and expansion.
+  The UI exposes the same via a "Run in shell" toggle on the create/edit form.
 - **Cluster mode** — start N instances with `-i N`; each gets
   `PM2_INSTANCE_ID` / `NODE_APP_INSTANCE` in its env.
 - **Ecosystem files** — `pm2-go start ecosystem.config.json` (JSON; YAML
@@ -62,6 +66,13 @@ make install                       # → ~/.local/bin/pm2-go (override with PREF
 # Start something. The daemon auto-spawns on the first command.
 pm2-go start /path/to/server.js --name api -i 4 \
     --watch src --ignore-watch '*.log' --max-memory-restart 300M
+
+# Or pass a long command line as one quoted string — it auto-splits into
+# script + args, the same way a shell would:
+pm2-go start "node /srv/app/index.js --port 3000 --env production" --name api
+
+# Or use --shell for pipes, redirects, and shell expansion:
+pm2-go start --shell "cd /srv/app && exec node index.js | tee -a /var/log/app.log" --name api
 
 pm2-go list                        # status table
 pm2-go logs api                    # tail + follow (Ctrl-C to stop)
@@ -144,6 +155,43 @@ If the UI and daemon are on different hosts, point the UI at the remote daemon:
 PM2_GO_DAEMON_URL=http://daemon-host.internal:9615
 PM2_GO_DAEMON_TOKEN=<paste ~/.pm2-go/api-token from that host>
 ```
+
+### Running the test suite
+
+The Go daemon has unit + integration tests covering the supervisor, IPC, web
+API, ecosystem parsing, log capture, watcher, metrics, and CLI helpers. Tests
+run against a temp `PM2_GO_HOME` (per `t.TempDir()`) so they never touch
+`~/.pm2-go`.
+
+```bash
+cd daemon
+make test            # go test ./...
+make test-race       # go test -race ./...   (catches concurrency bugs)
+make test-cover      # go test -cover ./...  (per-package coverage)
+make lint            # go vet ./...
+```
+
+Direct `go test` examples (useful while iterating):
+
+```bash
+# One package, verbose:
+~/go-toolchain/go/bin/go test -v ./internal/daemon
+
+# A single test by name:
+~/go-toolchain/go/bin/go test -run TestSupervisorClusterMode ./internal/daemon
+
+# All tests, race detector, no cache, with coverage profile:
+~/go-toolchain/go/bin/go test -race -count=1 -coverprofile=cover.out ./...
+~/go-toolchain/go/bin/go tool cover -html=cover.out
+```
+
+The integration tests spawn real `/bin/sleep`, `/bin/true`, `/bin/false`, and
+`/bin/sh` processes, so they need a POSIX userland (any Linux). A full run
+takes ~5 seconds with `-race`.
+
+If a test fails intermittently, it's almost always a timing race — bump the
+`waitUntil` deadlines in `daemon/internal/daemon/supervisor_test.go` (default
+3s) or rerun with `-count=1` to defeat the cache.
 
 ### Troubleshooting
 

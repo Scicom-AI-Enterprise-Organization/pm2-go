@@ -436,21 +436,29 @@ func (s *Supervisor) startSpec(spec *process.Spec) error {
 		s.mu.RLock()
 		existing := s.runtimes[rtID]
 		s.mu.RUnlock()
+		var carryRestarts, carryUnstable int
 		if existing != nil {
 			existing.RLock()
 			state := existing.State
+			carryRestarts = existing.Restarts
+			carryUnstable = existing.UnstableRestarts
 			existing.RUnlock()
 			if state == process.StateOnline || state == process.StateLaunching {
 				continue
 			}
+			// User-initiated restart counts as one more restart so the UI/CLI
+			// reflects the action.
+			carryRestarts++
 		}
 		rt := &process.Runtime{
-			ID:         rtID,
-			AppID:      spec.ID,
-			Name:       spec.Name,
-			InstanceID: i,
-			Namespace:  spec.Namespace,
-			State:      process.StateLaunching,
+			ID:               rtID,
+			AppID:            spec.ID,
+			Name:             spec.Name,
+			InstanceID:       i,
+			Namespace:        spec.Namespace,
+			State:            process.StateLaunching,
+			Restarts:         carryRestarts,
+			UnstableRestarts: carryUnstable,
 		}
 		rt.SetStopCh(make(chan struct{}))
 		s.mu.Lock()

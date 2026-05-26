@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -57,17 +58,67 @@ var startCmd = &Command{
 		var scriptArgs sliceFlag
 		fs.Var(&scriptArgs, "arg", "argument to pass to the script (repeatable)")
 		expBackoff := fs.Bool("exp-backoff", false, "exponential backoff on unstable restarts")
-		if err := fs.Parse(reorderArgs(args)); err != nil {
+		shell := fs.Bool("shell", false, "run the command through /bin/sh -c (pipes, redirects, expansions)")
+		if err := fs.Parse(reorderArgs(args, "no-autorestart", "exp-backoff", "shell")); err != nil {
 			return err
 		}
 		positional := fs.Args()
 		if len(positional) == 0 {
 			fs.Usage()
-			return errors.New("missing script or ecosystem file")
+			return errors.New("missing script, command, or ecosystem file")
 		}
+
+		// --shell: join all positionals and wrap them in /bin/sh -c "..."
+		// pm2-go start --shell "cd /srv && node app.js | tee log"
+		if *shell {
+			cmd := strings.Join(positional, " ")
+			displayName := deriveShellName(*name, cmd)
+			if *instancesShort > 0 {
+				*instances = *instancesShort
+			}
+			spec := &process.Spec{
+				Name:                displayName,
+				Script:              "/bin/sh",
+				Args:                []string{"-c", cmd},
+				Cwd:                 *cwd,
+				Env:                 env,
+				EnvFiles:            envFiles,
+				Instances:           *instances,
+				Namespace:           *namespace,
+				AutorestartDisabled: *noAutorestart,
+				MaxRestarts:         *maxRestarts,
+				MaxMemoryRestart:    *maxMemBytes,
+				KillTimeout:         time.Duration(*killTimeoutMS) * time.Millisecond,
+				Watch:               watch,
+				IgnoreWatch:         ignore,
+				ExpBackoffRestart:   *expBackoff,
+			}
+			spec.ID = spec.Name
+			if err := c.StartSpec(ctx, spec); err != nil {
+				return err
+			}
+			fmt.Printf("[pm2-go] started %s\n", spec.Name)
+			return nil
+		}
+
 		target := positional[0]
-		// pass extra positional as script args
-		scriptArgs = append(scriptArgs, positional[1:]...)
+		extraArgs := positional[1:]
+
+		// Auto-split: `pm2-go start "node app.js --port 3000"` — if the single
+		// positional contains whitespace AND isn't an existing file, parse it
+		// shell-style into [script, ...args]. This is the natural form for
+		// long command lines pasted as a quoted string.
+		if len(positional) == 1 && containsSpace(target) && !fileExists(target) && !isEcosystem(target) {
+			toks, err := shellSplit(target)
+			if err != nil {
+				return err
+			}
+			if len(toks) > 0 {
+				target = toks[0]
+				extraArgs = append(toks[1:], extraArgs...)
+			}
+		}
+		scriptArgs = append(scriptArgs, extraArgs...)
 
 		if isEcosystem(target) {
 			specs, err := config.LoadEcosystem(target)
@@ -128,7 +179,40 @@ func deriveName(name, target string) string {
 	if i := strings.LastIndex(base, "."); i > 0 {
 		base = base[:i]
 	}
-	return base
+	return sanitizeName(base)
+}
+
+// deriveShellName picks a default name for `--shell` invocations. It uses the
+// first whitespace-delimited token of the command line, since the full command
+// is too long to be a name.
+func deriveShellName(name, cmd string) string {
+	if name != "" {
+		return name
+	}
+	first := strings.TrimSpace(cmd)
+	if first == "" {
+		return "app"
+	}
+	if i := strings.IndexAny(first, " \t"); i > 0 {
+		first = first[:i]
+	}
+	return sanitizeName(filepath.Base(first))
+}
+
+func sanitizeName(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	out := b.String()
+	if out == "" {
+		out = "app"
+	}
+	return out
 }
 
 func absScript(p string) string {
@@ -140,4 +224,18 @@ func absScript(p string) string {
 		return p
 	}
 	return abs
+}
+
+func containsSpace(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] == ' ' || s[i] == '\t' {
+			return true
+		}
+	}
+	return false
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }

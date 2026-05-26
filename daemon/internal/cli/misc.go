@@ -49,7 +49,7 @@ var startupCmd = &Command{
 		fs := newFlagSet("startup")
 		platform := fs.String("platform", "systemd", "systemd | launchd | openrc (only systemd implemented)")
 		install := fs.Bool("install", false, "write the unit to ~/.config/systemd/user/ and enable it")
-		if err := fs.Parse(reorderArgs(args)); err != nil {
+		if err := fs.Parse(reorderArgs(args, "install")); err != nil {
 			return err
 		}
 		if *platform != "systemd" {

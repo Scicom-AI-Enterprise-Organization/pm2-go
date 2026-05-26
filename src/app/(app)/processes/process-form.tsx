@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import type { ProcessSpec } from "@/lib/pm2";
 import { startAction, upsertAction } from "./actions";
+
+/**
+ * Detect whether a spec was originally created via "Run in shell" mode. The
+ * daemon stores those as `script="/bin/sh" args=["-c", "<command>"]`, so the
+ * round-trip is lossless: edit mode can detect and reproduce the same form
+ * state.
+ */
+function detectShell(spec?: ProcessSpec): { isShell: boolean; command: string } {
+  if (!spec) return { isShell: false, command: "" };
+  const isShell =
+    (spec.script === "/bin/sh" || spec.script === "/bin/bash") &&
+    Array.isArray(spec.args) &&
+    spec.args.length >= 2 &&
+    spec.args[0] === "-c";
+  return {
+    isShell,
+    command: isShell ? (spec.args?.[1] ?? "") : "",
+  };
+}
 
 type Mode = "create" | "edit";
 
@@ -27,6 +46,8 @@ export function ProcessForm({ mode, initial }: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const isEdit = mode === "edit";
+  const detected = detectShell(initial);
+  const [shellMode, setShellMode] = useState<boolean>(detected.isShell);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -38,19 +59,35 @@ export function ProcessForm({ mode, initial }: Props) {
     }
     const watch = splitCSV(fd.get("watch"));
     const ignoreWatch = splitCSV(fd.get("ignore_watch"));
-    const argList = String(fd.get("args") ?? "")
-      .split(/\s+/)
-      .filter(Boolean);
 
     const name = String(fd.get("name") ?? "").trim();
     const maxMem = parseMemory(String(fd.get("max_memory_restart") ?? "").trim());
 
+    let script: string;
+    let args: string[] | undefined;
+    let interpreter: string | undefined;
+    if (shellMode) {
+      // Wrap a free-form command line in /bin/sh -c "..." just like
+      // `pm2-go start --shell` does on the CLI.
+      const cmd = String(fd.get("command") ?? "").trim();
+      script = "/bin/sh";
+      args = ["-c", cmd];
+      interpreter = undefined;
+    } else {
+      script = String(fd.get("script") ?? "").trim();
+      const argList = String(fd.get("args") ?? "")
+        .split(/\s+/)
+        .filter(Boolean);
+      args = argList.length ? argList : undefined;
+      interpreter = emptyToUndefined(String(fd.get("interpreter") ?? ""));
+    }
+
     const spec: Partial<ProcessSpec> = {
       name,
-      script: String(fd.get("script") ?? "").trim(),
-      interpreter: emptyToUndefined(String(fd.get("interpreter") ?? "")),
+      script,
+      interpreter,
       cwd: emptyToUndefined(String(fd.get("cwd") ?? "")),
-      args: argList.length ? argList : undefined,
+      args,
       instances: Number(fd.get("instances") || 1),
       namespace: String(fd.get("namespace") ?? "").trim() || "default",
       env: Object.keys(env).length ? env : undefined,
@@ -83,6 +120,22 @@ export function ProcessForm({ mode, initial }: Props) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
+      <div className="flex items-center gap-3 rounded-md border border-border bg-muted/40 p-3">
+        <Switch
+          id="shell-mode"
+          checked={shellMode}
+          onCheckedChange={setShellMode}
+        />
+        <div>
+          <Label htmlFor="shell-mode" className="cursor-pointer">
+            Run in shell <span className="font-mono text-xs">/bin/sh -c</span>
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Enable for pipes, redirects, env expansion, and long quoted command lines.
+          </p>
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           label="Name"
@@ -98,31 +151,64 @@ export function ProcessForm({ mode, initial }: Props) {
           placeholder="default"
           defaultValue={initial?.namespace}
         />
-        <Field
-          label="Script"
-          name="script"
-          required
-          placeholder="/srv/app/index.js"
-          defaultValue={initial?.script}
-        />
-        <Field
-          label="Interpreter"
-          name="interpreter"
-          placeholder="node, python3, /bin/bash"
-          defaultValue={initial?.interpreter}
-        />
-        <Field
-          label="Working dir"
-          name="cwd"
-          placeholder="/srv/app"
-          defaultValue={initial?.cwd}
-        />
-        <Field
-          label="Args"
-          name="args"
-          placeholder="--port 3000 --verbose"
-          defaultValue={initial?.args?.join(" ")}
-        />
+      </div>
+
+      {shellMode ? (
+        <div>
+          <Label htmlFor="command">Command</Label>
+          <Textarea
+            id="command"
+            name="command"
+            required
+            rows={3}
+            spellCheck={false}
+            placeholder='cd /srv/app && node index.js --port 3000 | tee -a /var/log/app.log'
+            defaultValue={detected.command}
+            className="font-mono text-xs"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Runs as <code className="font-mono">/bin/sh -c &quot;…&quot;</code>.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Script"
+            name="script"
+            required
+            placeholder="/srv/app/index.js"
+            defaultValue={initial?.script}
+          />
+          <Field
+            label="Interpreter"
+            name="interpreter"
+            placeholder="node, python3, /bin/bash"
+            defaultValue={initial?.interpreter}
+          />
+          <Field
+            label="Args"
+            name="args"
+            placeholder="--port 3000 --verbose"
+            defaultValue={initial?.args?.join(" ")}
+          />
+          <Field
+            label="Working dir"
+            name="cwd"
+            placeholder="/srv/app"
+            defaultValue={initial?.cwd}
+          />
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {shellMode ? (
+          <Field
+            label="Working dir"
+            name="cwd"
+            placeholder="/srv/app"
+            defaultValue={initial?.cwd}
+          />
+        ) : null}
         <Field
           label="Instances"
           name="instances"

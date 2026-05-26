@@ -9,13 +9,14 @@ import "strings"
 // Go's stdlib flag package stops at the first non-flag token; this helper
 // moves flags to the front. A bare `--` terminator marks the rest as positional.
 //
-// Caveat: for flags that take a value as a separate token (e.g. `--name foo`),
-// we need to know whether the flag is boolean or not. Since we use mixed-style
-// flagsets, the rule is: a token that looks like `--key=value` is one piece;
-// `--key value` is two pieces and we always treat the following token as the
-// value unless it itself starts with `-`. Boolean flags must be written as
-// `--bool` or `--bool=true`.
-func reorderArgs(args []string) []string {
+// `boolFlags` lists the names (without leading dashes) of boolean flags that
+// don't consume the following token — without this list, `--shell "cmd"` would
+// incorrectly treat "cmd" as the value of --shell.
+func reorderArgs(args []string, boolFlags ...string) []string {
+	bools := make(map[string]bool, len(boolFlags))
+	for _, n := range boolFlags {
+		bools[n] = true
+	}
 	var flags, positional []string
 	terminator := false
 	for i := 0; i < len(args); i++ {
@@ -25,14 +26,19 @@ func reorderArgs(args []string) []string {
 			continue
 		}
 		if a == "--" {
-			terminator = true
-			positional = append(positional, args[i+1:]...)
+			// Keep the terminator in the positional list so downstream
+			// flag.Parse still sees it and stops processing the same way.
+			positional = append(positional, args[i:]...)
 			break
 		}
 		if strings.HasPrefix(a, "-") && len(a) > 1 {
 			flags = append(flags, a)
 			// inline value with = -> done
 			if strings.Contains(a, "=") {
+				continue
+			}
+			name := strings.TrimLeft(a, "-")
+			if bools[name] {
 				continue
 			}
 			// otherwise look at the next token; if it doesn't start with '-' it's the value

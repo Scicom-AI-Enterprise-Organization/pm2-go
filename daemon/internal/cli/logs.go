@@ -23,7 +23,7 @@ var logsCmd = &Command{
 		stream := fs.String("stream", "", "only 'out' or 'err'")
 		follow := fs.Bool("follow", true, "follow new lines after history")
 		noStream := fs.Bool("nostream", false, "print only history, don't follow")
-		if err := fs.Parse(reorderArgs(args)); err != nil {
+		if err := fs.Parse(reorderArgs(args, "follow", "nostream")); err != nil {
 			return err
 		}
 		if *noStream {

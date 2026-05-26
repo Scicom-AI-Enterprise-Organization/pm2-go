@@ -22,7 +22,7 @@ var webCmd = &Command{
 		host := fs.String("host", "127.0.0.1", "bind address")
 		regen := fs.Bool("regenerate-token", false, "create a fresh API token, invalidating the old one")
 		showToken := fs.Bool("token", false, "print the current API token")
-		if err := fs.Parse(reorderArgs(args)); err != nil {
+		if err := fs.Parse(reorderArgs(args, "regenerate-token", "token")); err != nil {
 			return err
 		}
 		if *showToken {

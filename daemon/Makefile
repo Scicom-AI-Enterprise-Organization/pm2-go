@@ -6,7 +6,7 @@ GO ?= $(HOME)/go-toolchain/go/bin/go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.Version=$(VERSION)
 
-.PHONY: all build install test lint tidy clean run
+.PHONY: all build install test test-race test-cover lint tidy clean run
 
 all: build
 
@@ -20,6 +20,12 @@ install: build
 
 test:
 	$(GO) test ./...
+
+test-race:
+	$(GO) test -race ./...
+
+test-cover:
+	$(GO) test -cover ./...
 
 lint:
 	$(GO) vet ./...
